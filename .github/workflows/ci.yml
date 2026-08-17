@@ -2,7 +2,9 @@ name: ShipsEar-DWSTr CI Pipeline
 
 on:
     push:
+        branches: ["master", "main"]
     pull_request:
+        branches: ["master", "main"]
 
 jobs:
     format-and-lint:
