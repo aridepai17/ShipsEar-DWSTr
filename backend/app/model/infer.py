@@ -1,5 +1,8 @@
+import os
+
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
 import json
-import pickle
 from pathlib import Path
 
 import numpy as np
@@ -17,8 +20,8 @@ class DWSTrService:
     def __init__(self):
         with open(ARTIFACT_DIR / "preprocess_config.json") as f:
             self.config = json.load(f)
-        with open(ARTIFACT_DIR / "class_names.pkl", "rb") as f:
-            self.class_names: list[str] = pickle.load(f)
+        with open(ARTIFACT_DIR / "class_names.json", "r") as f:
+            self.class_names: list[str] = json.load(f)
 
         self.model = keras.models.load_model(
             ARTIFACT_DIR / "dwstr_best_model.keras",
