@@ -1,0 +1,15 @@
+{
+  "sr": 22050,
+  "segment_duration_s": 0.075,
+  "segment_samples": 1654,
+  "n_fft": 2048,
+  "hop_length": 512,
+  "n_mels": 128,
+  "expected_frames": 4,
+  "preemphasis_coef": 0.97,
+  "input_shape": [
+    128,
+    4,
+    1
+  ]
+}

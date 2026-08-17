@@ -1,0 +1,10 @@
+# Node & Dependencies
+node_modules/
+frontend/node_modules/
+frontend/.next/
+
+# Python & Environment
+__pycache__/
+*.pyc
+.venv/
+venv/
