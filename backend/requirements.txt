@@ -2,7 +2,7 @@ fastapi
 uvicorn[standard]
 tensorflow>=2.16.0,<2.18.0
 librosa
-tf-keras~=2.15.0
+tf-keras>=2.16.0,<2.18.0
 numpy
 python-multipart
 matplotlib
