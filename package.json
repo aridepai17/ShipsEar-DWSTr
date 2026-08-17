@@ -1,35 +1,37 @@
 {
-  "name": "shipsear-dwstr",
-  "version": "1.0.0",
-  "description": "ShipsEar-DWSTr is a full-stack maritime acoustic classification platform. Powered by a custom Depthwise-Separable Convolution and Transformer model, it classifies 12 vessel types from the ShipsEar dataset. The Next.js and FastAPI app visualizes 75ms audio slices using an interactive waveform, log-mel spectrogram, and prediction timeline.",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prepare": "husky"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/aridepai17/ShipsEar-DWSTr.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/aridepai17/ShipsEar-DWSTr/issues"
-  },
-  "homepage": "https://github.com/aridepai17/ShipsEar-DWSTr#readme",
-  "devDependencies": {
-    "husky": "^9.1.7",
-    "lint-staged": "^17.3.0",
-    "prettier": "^3.9.6"
-  },
-  "lint-staged": {
-    "frontend/**/*.{js,jsx,ts,tsx,json,css}": [
-      "prettier --write"
-    ],
-    "*.md": [
-      "prettier --write"
-    ]
-  }
+    "name": "shipsear-dwstr",
+    "version": "1.0.0",
+    "description": "ShipsEar-DWSTr is a full-stack maritime acoustic classification platform...",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "prepare": "husky",
+        "format": "prettier --write \"frontend/**/*.{js,jsx,ts,tsx,json,css}\" \"*.md\"",
+        "format:check": "prettier --check \"frontend/**/*.{js,jsx,ts,tsx,json,css}\" \"*.md\""
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/aridepai17/ShipsEar-DWSTr.git"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "commonjs",
+    "bugs": {
+        "url": "https://github.com/aridepai17/ShipsEar-DWSTr/issues"
+    },
+    "homepage": "https://github.com/aridepai17/ShipsEar-DWSTr#readme",
+    "devDependencies": {
+        "husky": "^9.1.7",
+        "lint-staged": "^15.2.0",
+        "prettier": "^3.9.6"
+    },
+    "lint-staged": {
+        "frontend/**/*.{js,jsx,ts,tsx,json,css}": [
+            "prettier --write"
+        ],
+        "*.md": [
+            "prettier --write"
+        ]
+    }
 }
