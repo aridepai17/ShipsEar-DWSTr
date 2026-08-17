@@ -61,15 +61,21 @@ class DWSTrPreprocessor:
         """Returns (segments array shaped (N,128,4,1), clip duration in seconds)."""
         import io
 
-        audio, _ = librosa.load(io.BytesIO(audio_bytes), sr=self.sr, mono=True)
+        # Stop decoding exactly 0.1s past the limit. This prevents massive memory
+        # allocation and event loop blocking if a highly compressed file is uploaded.
+        audio, _ = librosa.load(
+            io.BytesIO(audio_bytes),
+            sr=self.sr,
+            mono=True,
+            duration=self.MAX_DURATION_S + 0.1,
+        )
         duration = len(audio) / self.sr
 
-        # Reject oversized clips BEFORE running preemphasis/STFT over every
-        # segment — cheapest possible place to fail fast.
+        # Reject oversized clips cheaply
         if duration > self.MAX_DURATION_S:
             raise ValueError(
-                f"Clip is {duration:.1f}s - max supported length is "
-                f"{self.MAX_DURATION_S:.0f}s. Trim the file and try again"
+                f"Clip exceeds the maximum supported length of "
+                f"{self.MAX_DURATION_S:.0f}s. Trim the file and try again."
             )
 
         segments = self.segment_audio(audio)
