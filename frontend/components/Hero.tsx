@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export function Hero() {
     return (
-        <section className="mx-auto max-2-5xl px-6 pt-32 pb-24 text-center">
+        <section className="mx-auto max-w-5xl px-6 pt-32 pb-24 text-center">
             <motion.p
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -28,7 +28,7 @@ export function Hero() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.25 }}
-                className="mx-auto mt-6 max-w-xl text-muted"
+                className="mx-auto mt-6 max-w-2xl text-muted"
             >
                 A depthwise-separable convolution and transformer model trained on ShipsEar, reading log-mel
                 spectrograms at 75-millisecond window at a time.
