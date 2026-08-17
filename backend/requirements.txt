@@ -1,7 +1,8 @@
 fastapi
 uvicorn[standard]
-tensorflow-cpu==2.16.*
+tensorflow>=2.16.0,<2.18.0
 librosa
+tf-keras>=2.16.0,<2.18.0
 numpy
 python-multipart
 matplotlib
