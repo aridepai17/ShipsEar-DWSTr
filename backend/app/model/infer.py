@@ -108,4 +108,11 @@ class DWSTrService:
         }
 
 
-service = DWSTrService()
+_instance = None
+
+
+def get_infer_service():
+    global _instance
+    if _instance is None:
+        _instance = DWSTrService()
+    return _instance
