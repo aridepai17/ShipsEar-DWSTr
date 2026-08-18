@@ -1,12 +1,9 @@
-import os
-
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
-
 import base64
 import io
 import json
 from pathlib import Path
 
+import keras
 import librosa
 import matplotlib
 
@@ -15,7 +12,6 @@ import numpy as np
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
-from tensorflow import keras
 
 from .layers import ClassTokenLayer, PositionalEmbedding, TransformerBlock
 from .preprocess import DWSTrPreprocessor
@@ -83,7 +79,7 @@ class DWSTrService:
 
     def predict(self, audio_bytes: bytes) -> dict:
         segments, duration = self.preprocessor.process_bytes(audio_bytes)
-        probs = self.model.predict(segments, batch_size=64, verbose=0)  # (N, 12)
+        probs = self.model.predict(segments, batch_size=64, verbose=0)
 
         mean_probs = probs.mean(axis=0)
         top_idx = int(np.argmax(mean_probs))
