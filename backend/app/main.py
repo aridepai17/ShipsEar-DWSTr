@@ -22,6 +22,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "https://shipsear-dwstr.vercel.app",
+        "https://shipsear-dwstr.vercel.app/",
     ],
     allow_methods=["POST", "GET"],
     allow_headers=["*"],
