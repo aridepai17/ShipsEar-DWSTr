@@ -1,4 +1,5 @@
 "use client";
+
 import { useState } from "react";
 import { UploadPanel } from "@/components/UploadPanel";
 import { PredictResult } from "@/lib/api";
@@ -12,7 +13,7 @@ export default function ClassifyPage() {
             <p className="mt-2 text-muted">Drop a hydrophone clip — up to 30 seconds — to see what the model hears.</p>
 
             <div className="mt-10">
-                <UploadPanel onResult={(r) => setResult(r)} />
+                <UploadPanel onUploadStart={() => setResult(null)} onResult={(r) => setResult(r)} />
             </div>
 
             {result && (
