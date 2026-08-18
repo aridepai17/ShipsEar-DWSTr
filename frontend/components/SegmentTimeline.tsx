@@ -98,10 +98,17 @@ export function SegmentTimeline({
         if (!container) return;
 
         const handleWheel = (e: WheelEvent) => {
+            const isZoomingIn = e.deltaY < 0;
+            const isZoomingOut = e.deltaY > 0;
+
+            if ((zoom <= 1 && isZoomingOut) || (zoom >= 10 && isZoomingIn)) {
+                return;
+            }
+
             e.preventDefault();
             const rect = container.getBoundingClientRect();
             const focalFraction = (e.clientX - rect.left) / rect.width;
-            const delta = e.deltaY < 0 ? 1.25 : 0.8;
+            const delta = isZoomingIn ? 1.25 : 0.8;
             applyZoom(zoom * delta, focalFraction);
         };
 
@@ -128,10 +135,8 @@ export function SegmentTimeline({
         const segW = (width * zoom) / totalSegments;
         const startPixelOffset = -panX * zoom * width;
 
-        // Render visible segment range
         timeline.forEach((seg, i) => {
             const x = startPixelOffset + i * segW;
-            // Cull off-screen bars
             if (x + segW < 0 || x > width) return;
 
             ctx.fillStyle = colorMap[displayClasses[i]] ?? "#33D6C4";
@@ -204,7 +209,6 @@ export function SegmentTimeline({
 
     return (
         <div className="group relative w-full select-none">
-            {/* Zoom Controls Overlay */}
             <div className="absolute right-3 top-3 z-30 flex items-center gap-1 rounded-lg border border-border/80 bg-surface-hi/90 p-1 backdrop-blur-md shadow-md">
                 <button
                     type="button"
@@ -235,7 +239,6 @@ export function SegmentTimeline({
                 )}
             </div>
 
-            {/* Timeline Viewport */}
             <div
                 ref={containerRef}
                 className={`relative h-36 w-full overflow-hidden rounded-xl border border-border bg-surface sm:h-44 md:h-48 ${
@@ -253,7 +256,6 @@ export function SegmentTimeline({
                 <canvas ref={playheadRef} className="pointer-events-none absolute inset-0 h-full w-full" />
             </div>
 
-            {/* Dynamic Cursor Tooltip */}
             {hover && !isDragging && (
                 <div
                     className="pointer-events-none absolute -top-11 z-40 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-surface-hi px-3 py-1.5 font-mono text-xs font-medium text-text shadow-xl backdrop-blur-sm"
