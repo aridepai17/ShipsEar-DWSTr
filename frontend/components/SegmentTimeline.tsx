@@ -40,9 +40,11 @@ export function SegmentTimeline({
     classNames: string[];
     currentTime: number;
 }) {
+    const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const playheadRef = useRef<HTMLCanvasElement>(null);
     const [hover, setHover] = useState<TimelineEntry | null>(null);
+    const [size, setSize] = useState({ w: 0, h: 0 });
 
     const colorMap = useMemo(
         () => Object.fromEntries(classNames.map((c, i) => [c, PALETTE[i % PALETTE.length]])),
@@ -52,6 +54,21 @@ export function SegmentTimeline({
     const displayClasses = useMemo(() => smoothForDisplay(timeline), [timeline]);
 
     useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const observer = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (entry) {
+                setSize({ w: entry.contentRect.width, h: entry.contentRect.height });
+            }
+        });
+
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
@@ -59,6 +76,8 @@ export function SegmentTimeline({
 
         const dpr = window.devicePixelRatio || 1;
         const { width, height } = canvas.getBoundingClientRect();
+        if (width === 0 || height === 0) return;
+
         canvas.width = width * dpr;
         canvas.height = height * dpr;
         ctx.scale(dpr, dpr);
@@ -69,15 +88,18 @@ export function SegmentTimeline({
             ctx.globalAlpha = 0.35 + seg.confidence * 0.65;
             ctx.fillRect(i * segW, 0, Math.ceil(segW) + 0.5, height);
         });
-    }, [timeline, displayClasses, colorMap]);
+    }, [timeline, displayClasses, colorMap, size]);
 
     useEffect(() => {
         const canvas = playheadRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
+
         const dpr = window.devicePixelRatio || 1;
         const { width, height } = canvas.getBoundingClientRect();
+        if (width === 0 || height === 0) return;
+
         canvas.width = width * dpr;
         canvas.height = height * dpr;
         ctx.scale(dpr, dpr);
@@ -87,7 +109,7 @@ export function SegmentTimeline({
         const x = Math.min(currentTime / totalDuration, 1) * width;
         ctx.fillStyle = "#EAF2F4";
         ctx.fillRect(x - 1, 0, 2, height);
-    }, [currentTime, timeline.length, segmentDuration]);
+    }, [currentTime, timeline.length, segmentDuration, size]);
 
     function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -98,6 +120,7 @@ export function SegmentTimeline({
 
     return (
         <div
+            ref={containerRef}
             className="relative h-16 overflow-hidden rounded-lg border border-border bg-surface"
             onMouseMove={handleMouseMove}
             onMouseLeave={() => setHover(null)}
