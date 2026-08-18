@@ -101,7 +101,7 @@ export function SegmentTimeline({
             const isZoomingIn = e.deltaY < 0;
             const isZoomingOut = e.deltaY > 0;
 
-            if ((zoom <= 1 && isZoomingOut) || (zoom >= 10 && isZoomingIn)) {
+            if ((!isZoomingIn && !isZoomingOut) || (zoom <= 1 && isZoomingOut) || (zoom >= 10 && isZoomingIn)) {
                 return;
             }
 
