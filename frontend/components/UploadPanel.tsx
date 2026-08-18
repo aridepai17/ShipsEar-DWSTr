@@ -5,7 +5,12 @@ import { useDropzone, FileRejection } from "react-dropzone";
 import { useMutation } from "@tanstack/react-query";
 import { classifyAudio, PredictResult } from "@/lib/api";
 
-export function UploadPanel({ onResult }: { onResult: (r: PredictResult, file: File) => void }) {
+interface UploadPanelProps {
+    onResult: (r: PredictResult, file: File) => void;
+    onUploadStart?: () => void;
+}
+
+export function UploadPanel({ onResult, onUploadStart }: UploadPanelProps) {
     const [error, setError] = useState<string | null>(null);
 
     const mutation = useMutation({
@@ -18,22 +23,29 @@ export function UploadPanel({ onResult }: { onResult: (r: PredictResult, file: F
             setError(null);
             const file = acceptedFiles[0];
             if (!file) return;
+
+            onUploadStart?.();
             mutation.mutate(file, { onSuccess: (result) => onResult(result, file) });
         },
-        [mutation, onResult],
+        [mutation, onResult, onUploadStart],
     );
 
-    const onDropRejected = useCallback((fileRejections: FileRejection[]) => {
-        const rejection = fileRejections[0];
-        if (!rejection) return;
+    const onDropRejected = useCallback(
+        (fileRejections: FileRejection[]) => {
+            const rejection = fileRejections[0];
+            if (!rejection) return;
 
-        const errorMsg =
-            rejection.errors[0]?.code === "too-many-files"
-                ? "Please upload only one audio file at a time."
-                : rejection.errors[0]?.message || "Unsupported file format. Please upload .wav, .mp3, .flac, or .ogg.";
+            onUploadStart?.();
+            const errorMsg =
+                rejection.errors[0]?.code === "too-many-files"
+                    ? "Please upload only one audio file at a time."
+                    : rejection.errors[0]?.message ||
+                      "Unsupported file format. Please upload .wav, .mp3, .flac, or .ogg.";
 
-        setError(errorMsg);
-    }, []);
+            setError(errorMsg);
+        },
+        [onUploadStart],
+    );
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
