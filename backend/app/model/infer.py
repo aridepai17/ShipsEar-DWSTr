@@ -79,10 +79,11 @@ class DWSTrService:
 
     def predict(self, audio_bytes: bytes) -> dict:
         segments, duration = self.preprocessor.process_bytes(audio_bytes)
-        probs = self.model.predict(segments, batch_size=64, verbose=0)
+        probs = self.model.predict(segments, batch_size=32, verbose=0)
 
         mean_probs = probs.mean(axis=0)
         top_idx = int(np.argmax(mean_probs))
+        top_confidence = float(mean_probs[top_idx])
         segment_labels = probs.argmax(axis=1)
 
         timeline = [
@@ -94,17 +95,24 @@ class DWSTrService:
             for i in range(len(segments))
         ]
 
+        class_probabilities = {
+            self.class_names[i]: float(mean_probs[i])
+            for i in range(len(self.class_names))
+        }
+
+        spectrogram_b64 = render_spectrogram_b64(audio_bytes, self.config)
+        num_segments = len(segments)
+
+        del segments, probs, mean_probs, segment_labels
+
         return {
             "predicted_class": self.class_names[top_idx],
-            "confidence": float(mean_probs[top_idx]),
+            "confidence": top_confidence,
             "duration_s": round(duration, 2),
-            "num_segments": len(segments),
-            "class_probabilities": {
-                self.class_names[i]: float(mean_probs[i])
-                for i in range(len(self.class_names))
-            },
+            "num_segments": num_segments,
+            "class_probabilities": class_probabilities,
             "timeline": timeline,
-            "spectrogram_b64": render_spectrogram_b64(audio_bytes, self.config),
+            "spectrogram_b64": spectrogram_b64,
         }
 
 
