@@ -13,7 +13,11 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
+        <html
+            lang="en"
+            data-scroll-behavior="smooth"
+            className={`${display.variable} ${body.variable} ${mono.variable}`}
+        >
             <body className="bg-bg text-text font-body antialiased">
                 <Providers>{children}</Providers>
             </body>
