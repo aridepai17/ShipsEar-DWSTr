@@ -14,16 +14,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_service = None
-
 
 def get_service():
-    global _service
-    if _service is None:
-        from app.model.infer import service
+    from app.model.infer import get_infer_service
 
-        _service = service
-    return _service
+    return get_infer_service()
 
 
 @app.get("/health")
