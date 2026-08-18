@@ -5,7 +5,11 @@ app = FastAPI(title="ShipsEar DWSTr API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://your-frontend-domain.vercel.app"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://your-frontend-domain.vercel.app",
+    ],
     allow_methods=["POST", "GET"],
     allow_headers=["*"],
 )
