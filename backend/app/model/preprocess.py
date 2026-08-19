@@ -1,3 +1,5 @@
+import io
+
 import librosa
 import numpy as np
 
@@ -5,12 +7,6 @@ import numpy as np
 class DWSTrPreprocessor:
     """Exact port of the notebook's DWSTrPreprocessor (Cell 2)."""
 
-    # Hard ceiling on accepted clip length. librosa's mel-spectrogram extraction
-    # is CPU-bound and runs synchronously inside the request handler - an
-    # unbounded upload can block the event loop for other requests and blow up
-    # memory (a 60s clip already produces ~800 (128,4,1) segments; there's no
-    # reason a product demo needs more than this). Enforced in process_bytes()
-    # BEFORE segmentation/feature extraction, not after.
     MAX_DURATION_S = 30.0
 
     def __init__(self, config: dict):
@@ -57,12 +53,8 @@ class DWSTrPreprocessor:
 
         return mel_db
 
-    def process_bytes(self, audio_bytes: bytes) -> tuple[np.ndarray, float]:
-        """Returns (segments array shaped (N,128,4,1), clip duration in seconds)."""
-        import io
-
-        # Stop decoding exactly 0.1s past the limit. This prevents massive memory
-        # allocation and event loop blocking if a highly compressed file is uploaded.
+    def process_bytes(self, audio_bytes: bytes) -> tuple[np.ndarray, float, np.ndarray]:
+        """Returns (segments array shaped (N,128,4,1), clip duration in seconds, decoded audio vector)."""
         audio, _ = librosa.load(
             io.BytesIO(audio_bytes),
             sr=self.sr,
@@ -71,10 +63,9 @@ class DWSTrPreprocessor:
         )
         duration = len(audio) / self.sr
 
-        # Reject oversized clips cheaply
         if duration > self.MAX_DURATION_S:
             raise ValueError(
-                f"Clip exceeds the maximum supported length of "
+                f"Clip exceeds maximum supported length of "
                 f"{self.MAX_DURATION_S:.0f}s. Trim the file and try again."
             )
 
@@ -82,4 +73,4 @@ class DWSTrPreprocessor:
         if not segments:
             raise ValueError("Clip too short - needs at least one 75ms segment")
         specs = np.array([self.extract_mel_spectrogram(s) for s in segments])
-        return np.expand_dims(specs, -1), duration
+        return np.expand_dims(specs, -1), duration, audio
