@@ -1,3 +1,12 @@
+import os
+
+# Prevent TensorFlow oneDNN/multi-threading SIGSEGV (Exit 139) crashes on CPU
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+os.environ["TF_NUM_INTEROP_THREADS"] = "1"
+
 import base64
 import io
 import json
@@ -13,6 +22,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
@@ -49,7 +59,7 @@ def render_spectrogram_b64(audio_bytes: bytes, config: dict[str, Any]) -> str | 
         )
         mel_db = librosa.power_to_db(mel, ref=np.max)
 
-        fig = Figure(figsize=(10, 2.4), dpi=150)
+        fig = Figure(figsize=(10, 2.4), dpi=100)
         _ = FigureCanvasAgg(fig)
         ax = fig.add_axes([0, 0, 1, 1])
         ax.imshow(mel_db, aspect="auto", origin="lower", cmap=SONAR_CMAP)
@@ -117,13 +127,9 @@ class DWSTrService:
         """Runs preprocessing, tensor evaluation, and timeline formatting."""
         segments, duration = self.preprocessor.process_bytes(audio_bytes)
 
-        # Direct layer call bypasses Keras model.predict overhead
-        probs_tensor = self.model(segments, training=False)
-        probs = (
-            probs_tensor.numpy()
-            if hasattr(probs_tensor, "numpy")
-            else np.asarray(probs_tensor)
-        )
+        # Batch prediction safely managed on CPU context to avoid direct __call__ SIGSEGV
+        with tf.device("/CPU:0"):
+            probs = self.model.predict(segments, batch_size=32, verbose=0)
 
         mean_probs = probs.mean(axis=0)
         top_idx = int(np.argmax(mean_probs))
