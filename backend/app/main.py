@@ -1,8 +1,12 @@
 import os
 
-# Force CPU-only and restrict thread memory pools to prevent C-level segmentation faults (Status 139) on Render
+# Prevent C-level thread collisions on ARM CPU
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
 os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 
@@ -23,7 +27,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "https://shipsear-dwstr.vercel.app",
     ],
-    allow_methods=["*"],  # Essential for browser OPTIONS preflight requests
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -41,30 +45,25 @@ def health():
 
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):  # noqa: B008
+def predict(file: UploadFile = File(...)):  # Synchronous def offloads to threadpool
     if not file.filename.lower().endswith((".wav", ".mp3", ".flac", ".ogg")):
         raise HTTPException(status_code=400, detail="Unsupported file type.")
 
-    # Set a 10 MB hard limit (plenty of space for a 30s audio clip)
     MAX_BYTES = 10 * 1024 * 1024
 
-    # 1. Fail fast if the stated size from the request headers is already too large
     if file.size is not None and file.size > MAX_BYTES:
         raise HTTPException(
             status_code=413, detail="File too large. Maximum allowed size is 10MB."
         )
 
-    # 2. Read safely in chunks to prevent memory explosion if the Content-Length was spoofed
-    audio_bytes = bytearray()
-    while chunk := await file.read(1024 * 1024):  # Read in 1MB chunks
-        audio_bytes.extend(chunk)
+    # Synchronous file read inside threadpool
+    try:
+        audio_bytes = file.file.read(MAX_BYTES + 1)
         if len(audio_bytes) > MAX_BYTES:
             raise HTTPException(
                 status_code=413, detail="File too large. Maximum allowed size is 10MB."
             )
-
-    try:
-        return get_service().predict(bytes(audio_bytes))
+        return get_service().predict(audio_bytes)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except RuntimeError:
