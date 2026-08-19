@@ -20,7 +20,6 @@ import librosa
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -39,18 +38,17 @@ SONAR_CMAP = LinearSegmentedColormap.from_list(
 )
 
 
-def render_spectrogram_b64(audio_bytes: bytes, config: dict[str, Any]) -> str | None:
-    """Generates a log-mel spectrogram PNG encoded in base64.
+def render_spectrogram_b64(audio: np.ndarray, config: dict[str, Any]) -> str | None:
+    """Generates a log-mel spectrogram PNG encoded in base64 directly from audio array.
 
     Guarantees strict figure and memory cleanup to avoid leaks under heavy traffic.
     """
     fig = None
     buf = None
     try:
-        audio, sr = librosa.load(io.BytesIO(audio_bytes), sr=config["sr"], mono=True)
         mel = librosa.feature.melspectrogram(
             y=audio,
-            sr=sr,
+            sr=config["sr"],
             n_fft=config["n_fft"],
             hop_length=config["hop_length"],
             n_mels=config["n_mels"],
@@ -71,12 +69,7 @@ def render_spectrogram_b64(audio_bytes: bytes, config: dict[str, Any]) -> str | 
         )
         buf.seek(0)
         return base64.b64encode(buf.read()).decode("ascii")
-    except (
-        librosa.util.exceptions.ParameterError,
-        ValueError,
-        OSError,
-        RuntimeError,
-    ) as err:
+    except Exception as err:
         logger.warning("Spectrogram rendering failed: %s", err)
         return None
     finally:
@@ -84,7 +77,6 @@ def render_spectrogram_b64(audio_bytes: bytes, config: dict[str, Any]) -> str | 
             buf.close()
         if fig:
             fig.clear()
-            plt.close(fig)
 
 
 class DWSTrService:
@@ -92,6 +84,7 @@ class DWSTrService:
 
     def __init__(self, artifact_dir: Path = ARTIFACT_DIR) -> None:
         self.artifact_dir = artifact_dir
+        self._predict_lock = Lock()
         self._load_artifacts()
 
     def _load_artifacts(self) -> None:
@@ -137,17 +130,18 @@ class DWSTrService:
 
     def predict(self, audio_bytes: bytes) -> dict[str, Any]:
         """Runs preprocessing, tensor evaluation, and timeline formatting."""
-        segments, duration = self.preprocessor.process_bytes(audio_bytes)
+        segments, duration, audio = self.preprocessor.process_bytes(audio_bytes)
 
-        # Direct functional forward pass avoids Keras predict thread-pool overhead/SIGSEGV
-        with tf.device("/CPU:0"):
-            segments_tensor = tf.convert_to_tensor(segments, dtype=tf.float32)
-            probs_tensor = self.model(segments_tensor, training=False)
-            probs = (
-                probs_tensor.numpy()
-                if hasattr(probs_tensor, "numpy")
-                else np.asarray(probs_tensor)
-            )
+        # Thread lock serializes execution to prevent multi-worker memory pointer collisions
+        with self._predict_lock:
+            with tf.device("/CPU:0"):
+                segments_tensor = tf.convert_to_tensor(segments, dtype=tf.float32)
+                probs_tensor = self.model(segments_tensor, training=False)
+                probs = (
+                    probs_tensor.numpy()
+                    if hasattr(probs_tensor, "numpy")
+                    else np.asarray(probs_tensor)
+                )
 
         mean_probs = probs.mean(axis=0)
         top_idx = int(np.argmax(mean_probs))
@@ -169,7 +163,7 @@ class DWSTrService:
             for idx, cls_name in enumerate(self.class_names)
         }
 
-        spectrogram_b64 = render_spectrogram_b64(audio_bytes, self.config)
+        spectrogram_b64 = render_spectrogram_b64(audio, self.config)
 
         return {
             "predicted_class": self.class_names[top_idx],
