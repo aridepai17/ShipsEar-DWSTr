@@ -1,13 +1,17 @@
 import base64
 import io
 import json
+import logging
 from pathlib import Path
+from threading import Lock
+from typing import Any
 
 import keras
 import librosa
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import LinearSegmentedColormap
@@ -16,6 +20,8 @@ from matplotlib.figure import Figure
 from .layers import ClassTokenLayer, PositionalEmbedding, TransformerBlock
 from .preprocess import DWSTrPreprocessor
 
+logger = logging.getLogger(__name__)
+
 ARTIFACT_DIR = Path(__file__).resolve().parents[2] / "model_artifacts"
 
 SONAR_CMAP = LinearSegmentedColormap.from_list(
@@ -23,9 +29,13 @@ SONAR_CMAP = LinearSegmentedColormap.from_list(
 )
 
 
-def render_spectrogram_b64(audio_bytes: bytes, config: dict) -> str | None:
-    """Full-clip log-mel spectrogram as a base64 PNG, styled to match the
-    frontend's dark theme. Returns None on any failure - never raises."""
+def render_spectrogram_b64(audio_bytes: bytes, config: dict[str, Any]) -> str | None:
+    """Generates a log-mel spectrogram PNG encoded in base64.
+
+    Guarantees strict figure and memory cleanup to avoid leaks under heavy traffic.
+    """
+    fig = None
+    buf = None
     try:
         audio, sr = librosa.load(io.BytesIO(audio_bytes), sr=config["sr"], mono=True)
         mel = librosa.feature.melspectrogram(
@@ -40,7 +50,7 @@ def render_spectrogram_b64(audio_bytes: bytes, config: dict) -> str | None:
         mel_db = librosa.power_to_db(mel, ref=np.max)
 
         fig = Figure(figsize=(10, 2.4), dpi=150)
-        canvas = FigureCanvasAgg(fig)
+        _ = FigureCanvasAgg(fig)
         ax = fig.add_axes([0, 0, 1, 1])
         ax.imshow(mel_db, aspect="auto", origin="lower", cmap=SONAR_CMAP)
         ax.axis("off")
@@ -49,25 +59,50 @@ def render_spectrogram_b64(audio_bytes: bytes, config: dict) -> str | None:
         fig.savefig(
             buf, format="png", facecolor="#070B10", bbox_inches="tight", pad_inches=0
         )
-        fig.clear()
-        del fig, canvas
         buf.seek(0)
         return base64.b64encode(buf.read()).decode("ascii")
-    except (OSError, ValueError, RuntimeError):
+    except (
+        librosa.util.exceptions.ParameterError,
+        ValueError,
+        OSError,
+        RuntimeError,
+    ) as err:
+        logger.warning("Spectrogram rendering failed: %s", err)
         return None
+    finally:
+        if buf:
+            buf.close()
+        if fig:
+            fig.clear()
+            plt.close(fig)
 
 
 class DWSTrService:
-    """Loads once at process start; reused across requests."""
+    """Production inference engine for the DWSTr model."""
 
-    def __init__(self):
-        with open(ARTIFACT_DIR / "preprocess_config.json") as f:
-            self.config = json.load(f)
-        with open(ARTIFACT_DIR / "class_names.json", "r") as f:
+    def __init__(self, artifact_dir: Path = ARTIFACT_DIR) -> None:
+        self.artifact_dir = artifact_dir
+        self._load_artifacts()
+
+    def _load_artifacts(self) -> None:
+        """Loads preprocess config, class map, and compiled Keras model into memory."""
+        config_path = self.artifact_dir / "preprocess_config.json"
+        class_path = self.artifact_dir / "class_names.json"
+        model_path = self.artifact_dir / "dwstr_best_model.keras"
+
+        if not (config_path.exists() and class_path.exists() and model_path.exists()):
+            raise FileNotFoundError(
+                f"Required model artifacts are missing from {self.artifact_dir}"
+            )
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            self.config: dict[str, Any] = json.load(f)
+
+        with open(class_path, "r", encoding="utf-8") as f:
             self.class_names: list[str] = json.load(f)
 
         self.model = keras.models.load_model(
-            ARTIFACT_DIR / "dwstr_best_model.keras",
+            model_path,
             custom_objects={
                 "TransformerBlock": TransformerBlock,
                 "ClassTokenLayer": ClassTokenLayer,
@@ -76,19 +111,29 @@ class DWSTrService:
             safe_mode=False,
         )
         self.preprocessor = DWSTrPreprocessor(self.config)
+        logger.info("DWSTrService model and preprocessor loaded successfully.")
 
-    def predict(self, audio_bytes: bytes) -> dict:
+    def predict(self, audio_bytes: bytes) -> dict[str, Any]:
+        """Runs preprocessing, tensor evaluation, and timeline formatting."""
         segments, duration = self.preprocessor.process_bytes(audio_bytes)
-        probs = self.model.predict(segments, batch_size=32, verbose=0)
+
+        # Direct layer call bypasses Keras model.predict overhead
+        probs_tensor = self.model(segments, training=False)
+        probs = (
+            probs_tensor.numpy()
+            if hasattr(probs_tensor, "numpy")
+            else np.asarray(probs_tensor)
+        )
 
         mean_probs = probs.mean(axis=0)
         top_idx = int(np.argmax(mean_probs))
         top_confidence = float(mean_probs[top_idx])
         segment_labels = probs.argmax(axis=1)
 
+        segment_duration = self.config.get("segment_duration_s", 1.0)
         timeline = [
             {
-                "start_s": round(i * self.config["segment_duration_s"], 3),
+                "start_s": round(i * segment_duration, 3),
                 "class": self.class_names[int(segment_labels[i])],
                 "confidence": float(probs[i][segment_labels[i]]),
             }
@@ -96,31 +141,33 @@ class DWSTrService:
         ]
 
         class_probabilities = {
-            self.class_names[i]: float(mean_probs[i])
-            for i in range(len(self.class_names))
+            cls_name: float(mean_probs[idx])
+            for idx, cls_name in enumerate(self.class_names)
         }
 
         spectrogram_b64 = render_spectrogram_b64(audio_bytes, self.config)
-        num_segments = len(segments)
-
-        del segments, probs, mean_probs, segment_labels
 
         return {
             "predicted_class": self.class_names[top_idx],
             "confidence": top_confidence,
             "duration_s": round(duration, 2),
-            "num_segments": num_segments,
+            "num_segments": len(segments),
             "class_probabilities": class_probabilities,
             "timeline": timeline,
             "spectrogram_b64": spectrogram_b64,
         }
 
 
-_instance = None
+# Double-checked locking thread-safe singleton
+_instance: DWSTrService | None = None
+_lock: Lock = Lock()
 
 
-def get_infer_service():
+def get_infer_service() -> DWSTrService:
+    """Thread-safe initializer for the singleton instance."""
     global _instance
     if _instance is None:
-        _instance = DWSTrService()
+        with _lock:
+            if _instance is None:
+                _instance = DWSTrService()
     return _instance
