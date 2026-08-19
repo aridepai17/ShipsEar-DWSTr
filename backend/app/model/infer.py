@@ -95,7 +95,7 @@ class DWSTrService:
         self._load_artifacts()
 
     def _load_artifacts(self) -> None:
-        """Loads preprocess config, class map, and compiled Keras model into memory."""
+        """Loads preprocess config, class map, compiled Keras model, and performs warmup."""
         config_path = self.artifact_dir / "preprocess_config.json"
         class_path = self.artifact_dir / "class_names.json"
         model_path = self.artifact_dir / "dwstr_best_model.keras"
@@ -121,15 +121,33 @@ class DWSTrService:
             safe_mode=False,
         )
         self.preprocessor = DWSTrPreprocessor(self.config)
+
+        # Warm up graph execution and custom layers at startup to prevent dynamic building segfaults
+        try:
+            raw_shape = self.model.input_shape
+            dummy_shape = (1,) + tuple(dim for dim in raw_shape[1:] if dim is not None)
+            dummy_tensor = tf.zeros(dummy_shape, dtype=tf.float32)
+            with tf.device("/CPU:0"):
+                _ = self.model(dummy_tensor, training=False)
+            logger.info("Model warmup pass completed successfully.")
+        except Exception as err:
+            logger.warning("Model warmup pass failed: %s", err)
+
         logger.info("DWSTrService model and preprocessor loaded successfully.")
 
     def predict(self, audio_bytes: bytes) -> dict[str, Any]:
         """Runs preprocessing, tensor evaluation, and timeline formatting."""
         segments, duration = self.preprocessor.process_bytes(audio_bytes)
 
-        # Batch prediction safely managed on CPU context to avoid direct __call__ SIGSEGV
+        # Direct functional forward pass avoids Keras predict thread-pool overhead/SIGSEGV
         with tf.device("/CPU:0"):
-            probs = self.model.predict(segments, batch_size=32, verbose=0)
+            segments_tensor = tf.convert_to_tensor(segments, dtype=tf.float32)
+            probs_tensor = self.model(segments_tensor, training=False)
+            probs = (
+                probs_tensor.numpy()
+                if hasattr(probs_tensor, "numpy")
+                else np.asarray(probs_tensor)
+            )
 
         mean_probs = probs.mean(axis=0)
         top_idx = int(np.argmax(mean_probs))
